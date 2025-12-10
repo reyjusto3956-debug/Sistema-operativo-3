@@ -1,0 +1,153 @@
+✅ Práctica 1 – Configuración GRUB2 y Recuperación de Contraseña Root
+🔧 Modificar el tiempo de espera del GRUB2
+
+Editar archivo de configuración:
+
+sudo vim /etc/default/grub
+
+
+Cambiar la línea:
+
+GRUB_TIMEOUT=20
+
+
+Aplicar cambios al GRUB:
+
+sudo grub2-mkconfig -o /boot/grub2/grub.cfg
+
+
+Verificar:
+
+grep '^GRUB_TIMEOUT' /etc/default/grub
+
+🔐 Recuperación de contraseña root mediante rd.break
+
+En el menú GRUB → presionar e
+
+En la línea que comienza con linux, añadir al final:
+
+rd.break
+
+
+Iniciar con Ctrl + X
+
+En el shell de emergencia:
+
+mount -o remount,rw /sysroot
+chroot /sysroot
+passwd root
+touch /.autorelabel
+exit
+exit
+
+
+Iniciar sesión:
+
+su -
+
+✅ Práctica 2 – Shell Scripting
+📌 Script backup.sh (Backup con fecha/hora)
+
+Crear script:
+
+vim backup.sh
+
+
+Contenido:
+
+#!/bin/bash
+date=$(date +"%d-%m-%Y_%H-%M")
+user=$(whoami)
+
+mkdir -p ~/back_up
+
+if [ "$user" != "root" ]; then
+    tar -cf /home/${user}/back_up/${date}.tar /home/${user}/* &>/dev/null && echo -e "\n[+] Backup realizado...\n"
+else
+    tar -cf /root/back_up/${date}.tar /root/* &>/dev/null && echo -e "\n[+] Backup realizado...\n"
+fi
+
+
+Permisos:
+
+chmod +x backup.sh
+
+
+Ejecutar:
+
+./backup.sh
+
+
+Extraer:
+
+tar -xf ~/back_up/<archivo.tar>
+
+📌 Script ifconfig.sh (Guardar salida en el Escritorio)
+
+Crear script:
+
+vim ifconfig.sh
+
+
+Contenido:
+
+#!/bin/bash
+
+ifconfig=$(ifconfig)
+
+echo -e "\n[i] Introduzca el nombre del archivo:"
+read name
+
+touch ~/Desktop/${name}
+echo "$ifconfig" > ~/Desktop/${name}
+
+echo -e "\n[+] Archivo creado en ~/Desktop/${name}\n"
+
+
+Permisos:
+
+chmod +x ifconfig.sh
+
+
+Ejecutar:
+
+./ifconfig.sh
+
+✅ Práctica 3 – Redes y SSH
+🌐 Comprobación de red desde Windows
+ping 10.0.0.148
+
+🔧 Habilitar SSH en RHEL
+sudo systemctl enable sshd --now
+sudo systemctl status sshd
+
+🗝️ Conexión SSH desde Windows
+ssh r20241244@10.0.0.148
+
+
+En la VM:
+
+whoami
+ip a
+
+🔑 Generar llaves SSH en Windows
+ssh-keygen
+
+📤 Copiar llave pública al servidor
+A) Si tienes ssh-copy-id:
+ssh-copy-id -i C:\Users\TU_USER\.ssh\id_ed25519.pub r20241244@10.0.0.148
+
+B) Método manual con SCP:
+scp C:\Users\TU_USER\.ssh\id_ed25519.pub r20241244@10.0.0.148:/home/r20241244/
+
+
+En la VM:
+
+mkdir -p ~/.ssh
+cat ~/id_ed25519.pub >> ~/.ssh/authorized_keys
+chmod 700 ~/.ssh
+chmod 600 ~/.ssh/authorized_keys
+rm ~/id_ed25519.pub
+
+🧪 Probar acceso sin contraseña
+ssh r20241244@10.0.0.148
