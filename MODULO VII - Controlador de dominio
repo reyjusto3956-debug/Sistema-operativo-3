@@ -1,0 +1,267 @@
+=========================================================================================================================
+PRÁCTICA 1 — Compartir archivos con NFS en Rocky Linux
+=========================================================================================================================
+📌 En el servidor (IP: 10.0.0.148)
+1. Instalar NFS
+sudo dnf install nfs-utils -y
+
+2. Crear carpeta compartida
+sudo mkdir -p /srv/nfs/nombre_de_la_carpeta
+
+3. Configurar permisos
+sudo chown -R nobody:nobody /srv/nfs
+sudo chmod 777 /srv/nfs/nombre_de_la_carpeta
+
+4. Configurar exportación NFS
+sudo nano /etc/exports
+
+
+Contenido:
+
+/srv/nfs/nombre_de_la_carpeta 10.0.0.0/24(rw,sync,no_subtree_check,no_root_squash)
+
+5. Aplicar exportación
+sudo exportfs -rav
+
+6. Iniciar el servicio
+sudo systemctl enable nfs-server --now
+
+7. Abrir firewall
+sudo firewall-cmd --add-service=nfs --permanent
+sudo firewall-cmd --reload
+
+📌 En el cliente
+1. Instalar NFS
+sudo dnf install nfs-utils -y
+
+2. Crear punto de montaje
+sudo mkdir -p /mnt/nombre_del_montaje
+
+3. Montaje temporal
+sudo mount -t nfs 10.0.0.148:/srv/nfs/nombre_de_la_carpeta /mnt/nombre_del_montaje
+
+4. Verificar
+df -h
+
+5. Crear archivos de prueba
+
+En cliente:
+
+sudo touch /mnt/nombre_del_montaje/test_desde_cliente.txt
+
+
+En servidor:
+
+sudo touch /srv/nfs/nombre_de_la_carpeta/test_desde_servidor.txt
+
+📌 Montaje permanente (cliente)
+Editar fstab:
+sudo nano /etc/fstab
+
+
+Agregar:
+
+10.0.0.148:/srv/nfs/nombre_de_la_carpeta /mnt/nombre_del_montaje nfs defaults 0 0
+
+Reiniciar:
+sudo reboot
+
+=========================================================================================================================
+PRÁCTICA 2 — Servidor de Archivos con SAMBA en Rocky Linux
+=========================================================================================================================
+📌 En el servidor (10.0.0.148)
+1. Instalar Samba
+sudo dnf install samba samba-common samba-client -y
+
+2. Crear directorio compartido
+sudo mkdir -p /srv/samba/nombre_de_la_carpeta
+sudo chmod 777 /srv/samba/nombre_de_la_carpeta
+
+3. Crear usuario para Samba
+sudo useradd -M -s /sbin/nologin nombre_usuario
+sudo smbpasswd -a nombre_usuario
+
+4. Configurar smb.conf
+sudo nano /etc/samba/smb.conf
+
+
+Contenido:
+
+[nombre_recurso]
+   path = /srv/samba/nombre_de_la_carpeta
+   writable = yes
+   browseable = yes
+   valid users = nombre_usuario
+   create mask = 0777
+   directory mask = 0777
+
+5. Desactivar SELinux (temporal)
+sudo setenforce 0
+
+6. Habilitar e iniciar Samba
+sudo systemctl enable smb nmb --now
+sudo systemctl restart smb nmb
+
+7. Abrir firewall
+sudo firewall-cmd --add-service=samba --permanent
+sudo firewall-cmd --reload
+
+📌 En Windows (cliente)
+Acceder:
+\\10.0.0.148
+
+
+Ingresar usuario y contraseña de Samba.
+
+Mapear unidad:
+
+This PC
+
+Map Network Drive
+
+Ruta: \\10.0.0.148\nombre_recurso
+
+=========================================================================================================================
+PRÁCTICA 3 — Controlador de Dominio Samba AD/DC
+=========================================================================================================================
+📌 IP Única del DC: 10.0.0.148
+📌 Hostname: dc1.so3.inet
+📌 Interfaz: ens160
+1. Cambiar hostname
+sudo hostnamectl set-hostname dc1.so3.inet
+
+2. Editar /etc/hosts
+echo "10.0.0.148 dc1.so3.inet dc1" | sudo tee -a /etc/hosts
+
+3. Configurar IP estática
+sudo nmcli connection modify ens160 \
+ipv4.addresses "10.0.0.148/24" \
+ipv4.gateway "10.0.0.1" \
+ipv4.dns "10.0.0.148" \
+ipv4.dns "8.8.8.8" \
+ipv4.method manual
+
+
+Reiniciar red:
+
+sudo systemctl restart NetworkManager
+
+4. Activar repos CRB y EPEL
+sudo dnf config-manager --set-enabled crb
+sudo dnf install epel-release -y
+sudo dnf update -y
+
+5. Instalar dependencias para compilar Samba
+sudo dnf -y groupinstall "Development Tools"
+
+sudo dnf -y install wget tar gcc make python3-devel \
+docbook-style-xsl python3-markdown bison dbus-devel flex gdb \
+gnutls-devel jansson-devel keyutils-libs-devel krb5-workstation \
+libacl-devel libaio-devel libarchive-devel libattr-devel libblkid-devel \
+libtasn1 libtasn1-tools libxml2-devel libxslt lmdb-devel \
+openldap-devel pam-devel perl perl-ExtUtils-MakeMaker perl-Parse-Yapp \
+popt-devel python3-cryptography python3-dns python3-gpg readline-devel \
+rpcgen systemd-devel zlib-devel perl-JSON gpgme-devel screen pkgconfig \
+libnsl2-devel
+
+6. Crear directorio para Samba
+sudo mkdir /samba
+cd /samba
+sudo chown r20241244:r20241244 /samba
+
+7. Descargar y compilar Samba
+wget https://download.samba.org/pub/samba/stable/samba-4.21.3.tar.gz
+tar -zxvf samba-4.21.3.tar.gz
+cd samba-4.21.3
+
+./configure --prefix=/usr/local/samba \
+--enable-fhs \
+--with-systemd \
+--with-shared-modules=idmap_ad,idmap_hash,idmap_rid,winbindd \
+CFLAGS='-O2'
+
+make -j$(nproc)
+sudo make install
+
+8. Exportar binarios al PATH
+echo 'export PATH=/usr/local/samba/bin:/usr/local/samba/sbin:$PATH' | sudo tee /etc/profile.d/samba.sh
+source /etc/profile.d/samba.sh
+
+9. Provisionar dominio
+sudo /usr/local/samba/bin/samba-tool domain provision \
+--use-rfc2307 \
+--realm=SO3.INET \
+--domain=SO3 \
+--server-role=dc \
+--dns-backend=SAMBA_INTERNAL \
+--adminpass='Admin123$'
+
+10. Configurar Kerberos
+sudo cp /usr/local/samba/share/samba/setup/krb5.conf /etc/krb5.conf
+
+
+Si no existe, usar:
+
+[libdefaults]
+    default_realm = SO3.INET
+    dns_lookup_realm = false
+    dns_lookup_kdc = false
+
+[realms]
+    SO3.INET = {
+        kdc = dc1.so3.inet
+        admin_server = dc1.so3.inet
+    }
+
+[domain_realm]
+    .so3.inet = SO3.INET
+    so3.inet = SO3.INET
+
+11. Crear servicio systemd
+sudo tee /etc/systemd/system/samba.service > /dev/null <<'EOF'
+[Unit]
+Description=Samba Active Directory Domain Controller
+After=network.target remote-fs.target nss-lookup.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/samba/sbin/samba -i
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+
+Habilitar:
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now samba
+
+12. Abrir puertos del firewall
+sudo firewall-cmd --permanent --add-service=ldap
+sudo firewall-cmd --permanent --add-service=ldaps
+sudo firewall-cmd --permanent --add-service=kerberos
+sudo firewall-cmd --permanent --add-service=dns
+sudo firewall-cmd --reload
+
+13. Pruebas
+sudo samba-tool domain level show
+sudo samba-tool user list
+smbclient -L localhost -U Administrator
+host -t SRV _ldap._tcp.so3.inet
+
+14. Crear usuario en AD
+sudo samba-tool user create usuario1
+
+15. Desde Windows
+
+Poner DNS: 10.0.0.148
+
+Unirse al dominio: SO3.INET
+
+Reiniciar
+
+Entrar con:
+
+SO3\usuario1
