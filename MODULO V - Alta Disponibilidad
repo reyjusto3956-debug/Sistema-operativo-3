@@ -1,0 +1,227 @@
+📘 Práctica 1 – Sincronización de Carpetas con Rsync
+🔧 Configuración inicial (Servidor Primario — server-a)
+mkdir ~/DirSync
+cd ~/DirSync
+touch prueba{1..100}
+
+🔁 Sincronización hacia el servidor remoto (server-b ejemplo: 10.0.0.149)
+rsync -avz /home/r20241244/DirSync/ r20241244@10.0.0.149:/home/r20241244/Dirserv2
+
+
+Flags:
+
+-a → preserva permisos y estructura
+
+-v → verbose
+
+-z → compresión
+
+📂 Verificación en el servidor remoto (server-b)
+ssh r20241244@10.0.0.149
+cd /home/r20241244/Dirserv2
+ls
+
+✏️ Prueba de modificación + sincronización
+
+En server-a:
+
+vim /home/r20241244/DirSync/prueba20
+# Contenido de ejemplo:
+# PROBANDO SINCRONIZACION
+
+
+Sincronizar nuevamente:
+
+rsync -avz /home/r20241244/DirSync/ r20241244@10.0.0.149:/home/r20241244/Dirserv2
+
+
+Comprobar en server-b:
+
+ssh r20241244@10.0.0.149
+ls /home/r20241244/Dirserv2
+
+🔐 SSH sin contraseña (automation)
+
+En server-a:
+
+ssh-copy-id r20241244@10.0.0.149
+
+
+Crear más archivos y sincronizar:
+
+touch /home/r20241244/DirSync/sinc{1..200}
+rsync -avz /home/r20241244/DirSync/ r20241244@10.0.0.149:/home/r20241244/Dirserv2
+
+🕒 Automatización con Script + Cron (server-a)
+
+Crear script:
+
+vim /home/r20241244/sync.sh
+
+
+Contenido:
+
+#!/bin/bash
+rsync -avz /home/r20241244/DirSync/ r20241244@10.0.0.149:/home/r20241244/Dirserv2
+
+
+Dar permisos:
+
+chmod +x /home/r20241244/sync.sh
+
+
+Editar crontab (ejecución cada minuto — ajustar según necesidad):
+
+crontab -e
+# Añadir:
+* * * * * /home/r20241244/sync.sh
+
+
+Verificar en server-b que los archivos aparecen automáticamente.
+
+📘 Práctica 2 – Cluster con Pacemaker + PCS
+
+IPs de ejemplo para el cluster (ajusta a tu red):
+server-a = 10.0.0.148
+server-b = 10.0.0.149
+VIP = 10.0.0.150
+
+🔧 Habilitar repositorios necesarios (ambos nodos)
+sudo dnf config-manager --set-enabled crb
+sudo dnf config-manager --set-enabled highavailability
+
+📡 Configuración de /etc/hosts (ambos nodos)
+sudo vim /etc/hosts
+
+
+Agregar líneas (ejemplo):
+
+10.0.0.148 server-a
+10.0.0.149 server-b
+
+🛠 Instalar Pacemaker y PCS (ambos nodos)
+sudo dnf install pacemaker pcs -y
+sudo systemctl enable pcsd --now
+
+
+Firewall:
+
+sudo firewall-cmd --add-service=high-availability --permanent
+sudo firewall-cmd --reload
+
+
+Crear contraseña para hacluster (misma en ambos nodos):
+
+sudo passwd hacluster
+
+🧩 Crear y arrancar el cluster (desde uno de los nodos)
+
+Autenticación entre nodos:
+
+sudo pcs host auth server-a server-b -u hacluster -p 'CambiarPorContraseñaSegura'
+
+
+Crear cluster:
+
+sudo pcs cluster setup myCluster server-a server-b
+sudo pcs cluster start --all
+sudo pcs cluster status
+
+⚙️ Propiedades del Cluster (para entornos de prueba)
+
+Desactivar STONITH (solo en pruebas):
+
+sudo pcs property set stonith-enabled=false
+
+
+Política no quorum (útil para 2 nodos de prueba):
+
+sudo pcs property set no-quorum-policy=ignore
+
+🌐 Crear recurso VIP
+sudo pcs resource create vip ocf:heartbeat:IPaddr2 ip=10.0.0.150 cidr_netmask=24 op monitor interval=30s
+
+
+Probar con ping desde un equipo cliente:
+
+ping 10.0.0.150
+
+📘 Práctica 3 – Alta Disponibilidad HTTP con Keepalived
+🔧 Instalar Apache en ambos nodos
+sudo dnf install httpd -y
+sudo systemctl enable httpd --now
+
+
+Crear index en cada nodo:
+
+server-a (/var/www/html/index.html):
+
+<h1>Servidor 1 - Reymi Méndez (20241244)</h1>
+
+
+server-b (/var/www/html/index.html):
+
+<h1>Servidor 2 - Reymi Méndez (20241244)</h1>
+
+
+Firewall (puerto 80):
+
+sudo firewall-cmd --add-port=80/tcp --permanent
+sudo firewall-cmd --reload
+
+🔧 Instalar Keepalived (ambos nodos)
+sudo dnf install keepalived -y
+
+
+Eliminar configuración vieja si existe y crear la nueva:
+
+sudo rm -f /etc/keepalived/keepalived.conf
+sudo vim /etc/keepalived/keepalived.conf
+
+📄 keepalived.conf – server-a (MASTER, IP 10.0.0.148)
+vrrp_instance VI_1 {
+    state MASTER
+    interface ens160
+    virtual_router_id 51
+    priority 99
+    advert_int 1
+    authentication {
+        auth_type PASS
+        auth_pass 1234
+    }
+    virtual_ipaddress {
+        10.0.0.150
+    }
+}
+
+📄 keepalived.conf – server-b (BACKUP, IP 10.0.0.149)
+vrrp_instance VI_1 {
+    state BACKUP
+    interface ens160
+    virtual_router_id 51
+    priority 20
+    advert_int 1
+    authentication {
+        auth_type PASS
+        auth_pass 1234
+    }
+    virtual_ipaddress {
+        10.0.0.150
+    }
+}
+
+
+Habilitar y arrancar:
+
+sudo systemctl enable keepalived --now
+
+🧪 Prueba de funcionamiento
+
+Desde cualquier equipo de la red (o desde tu browser local si tienes ruta):
+
+Abrir:
+
+http://10.0.0.150
+
+
+Ver cuál servidor responde. Apagar server-a y comprobar que server-b asume la VIP automáticamente.
