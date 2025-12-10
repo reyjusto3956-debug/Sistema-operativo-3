@@ -1,0 +1,121 @@
+📘 Práctica 1: Instalación y Configuración de Docker (1 pt)
+1. Instalar Docker en RHEL 9
+sudo dnf install -y dnf-plugins-core
+sudo dnf config-manager --add-repo https://download.docker.com/linux/rhel/docker-ce.repo
+sudo dnf install -y docker-ce docker-ce-cli containerd.io
+sudo systemctl start docker
+sudo systemctl enable docker
+sudo usermod -aG docker $USER
+
+
+🔄 Cerrar y abrir sesión para aplicar el grupo docker
+
+2. Descargar imagen NGINX
+docker pull nginx
+
+3. Crear volumen persistente y carpeta local
+sudo mkdir -p /home/website
+sudo chmod -R 777 /home/website
+
+4. Crear página HTML
+cd /home/website/
+sudo nano index.html
+
+
+Pega este contenido:
+
+<html>
+<head>
+<title>DOCKER x NGINX</title>
+</head>
+<body>
+<H3>Reymi Mendez<br>
+Matrícula: 2024-1244</H3>
+</body>
+</html>
+
+5. Crear el contenedor NGINX
+docker run -d --name webserver \
+  -p 8888:80 \
+  -v /home/website:/usr/share/nginx/html \
+  nginx
+
+6. Verificar contenedor
+docker ps
+
+7. Probar en navegador
+http://127.0.0.1:8888
+
+📘 Práctica 2: Instalación de Portainer (1 pt)
+1. Crear volumen
+sudo docker volume create portainer_data
+
+2. Descargar Portainer
+docker pull portainer/portainer-ce:2.20.2
+
+3. Ejecutar Portainer
+sudo docker run -d -p 8000:8000 -p 9443:9443 --name portainer \
+    --restart=always \
+    --security-opt label=disable \
+    -v /var/run/docker.sock:/var/run/docker.sock:Z \
+    -v portainer_data:/data \
+    portainer/portainer-ce:2.20.2
+
+4. Acceder
+https://127.0.0.1:9443
+
+📘 Práctica 3: Despliegue de WordPress con Docker Compose (2 pts)
+1. Instalar Docker + Compose
+sudo dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+sudo systemctl enable --now docker
+
+2. Crear carpeta
+sudo mkdir WordPress
+cd WordPress/
+
+3. Crear archivo docker-compose.yml
+nano docker-compose.yml
+
+
+Pega esto:
+
+version: '3.8'
+
+services:
+  db:
+    image: mysql:5.7
+    container_name: wp_db
+    restart: always
+    environment:
+      MYSQL_DATABASE: wordpress
+      MYSQL_USER: wpuser
+      MYSQL_PASSWORD: wppass
+      MYSQL_ROOT_PASSWORD: rootpass
+    volumes:
+      - db_data:/var/lib/mysql
+
+  wordpress:
+    image: wordpress:latest
+    container_name: wp_site
+    depends_on:
+      - db
+    ports:
+      - "9000:80"
+    restart: always
+    environment:
+      WORDPRESS_DB_HOST: db:3306
+      WORDPRESS_DB_USER: wpuser
+      WORDPRESS_DB_PASSWORD: wppass
+      WORDPRESS_DB_NAME: wordpress
+    volumes:
+      - wp_data:/var/www/html
+
+volumes:
+  db_data:
+  wp_data:
+
+4. Levantar el entorno
+sudo docker compose up -d
+
+5. Ver contenedores
+sudo docker ps
