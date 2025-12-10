@@ -1,0 +1,210 @@
+📘 Práctica 1 – Servidor HTTP (Apache)
+🔧 Instalación y servicio
+sudo dnf install httpd -y
+sudo systemctl status httpd
+sudo systemctl enable httpd --now
+
+🛠 Archivo principal de configuración
+sudo vim /etc/httpd/conf/httpd.conf
+
+
+Parámetros importantes:
+
+ServerRoot → Ruta base de configuración
+
+Listen 80 → Puerto principal
+
+DocumentRoot → Carpeta donde Apache sirve páginas
+
+<Directory> → Permisos
+
+IncludeOptional conf.d/*.conf → Carga virtualhosts
+
+🌐 VirtualHost en puerto 80 (Hola Mundo)
+
+Archivo:
+
+sudo vim /etc/httpd/conf.d/rey80.conf
+
+
+Contenido:
+
+<VirtualHost *:80>
+    ServerName rey80.com
+    DocumentRoot /var/www/rey80
+</VirtualHost>
+
+
+Crear sitio:
+
+sudo mkdir -p /var/www/rey80
+cd /var/www/rey80
+sudo vim index.html
+
+
+index.html:
+
+<h1>Hola Mundo</h1>
+
+
+Reiniciar:
+
+sudo systemctl restart httpd
+
+🌐 VirtualHost en puerto 8080 (Nombre, matrícula y materia)
+
+Archivo:
+
+sudo vim /etc/httpd/conf.d/rey8080.conf
+
+
+Contenido:
+
+Listen 8080
+<VirtualHost *:8080>
+    ServerName rey8080.com
+    DocumentRoot /var/www/rey8080
+</VirtualHost>
+
+
+Crear sitio:
+
+sudo mkdir -p /var/www/rey8080
+cd /var/www/rey8080
+sudo vim index.html
+
+
+index.html:
+
+<html>
+  <head>
+    <title>Apache 8080</title>
+  </head>
+  <body>
+    <h1>Reymi Mendez</h1>
+    <p>2024-1244</p>
+    <p>Sistemas Operativos 3</p>
+  </body>
+</html>
+
+
+Reiniciar:
+
+sudo systemctl restart httpd
+
+🔥 Firewall
+sudo firewall-cmd --add-service=http --permanent
+sudo firewall-cmd --add-port=8080/tcp --permanent
+sudo firewall-cmd --reload
+sudo firewall-cmd --list-ports
+
+📧 Práctica 2 – Servidor de Correos (Postfix)
+🔧 Instalación
+sudo dnf install postfix s-nail -y
+sudo systemctl status postfix
+
+🛠 Configuración principal
+sudo vim /etc/postfix/main.cf
+
+
+Cambios:
+
+myhostname = rey.com
+myorigin = $myhostname
+inet_interfaces = all
+mydestination = $myhostname, localhost.$mydomain, localhost, $mydomain
+mynetworks = 10.0.0.0/24, 192.168.153.0/24, 127.0.0.0/8
+
+relayhost = [smtp.gmail.com]:587
+smtp_sasl_auth_enable = yes
+smtp_sasl_password_maps = hash:/etc/postfix/sasl_passwd
+smtp_sasl_security_options = noanonymous
+
+🔑 Credenciales Gmail
+sudo vim /etc/postfix/sasl_passwd
+
+
+Contenido:
+
+[smtp.gmail.com]:587 correo@gmail.com:APP_PASSWORD
+
+
+Convertir y proteger:
+
+sudo postmap /etc/postfix/sasl_passwd
+sudo chmod 600 /etc/postfix/sasl_passwd /etc/postfix/sasl_passwd.db
+
+
+Activar:
+
+sudo systemctl enable postfix --now
+
+📤 Envío del correo
+
+Crear mensaje:
+
+sudo vim email.txt
+
+
+Contenido:
+
+Nombre: Reymi mendez
+Matricula: 2024-1244
+
+
+Enviar:
+
+mail -s "MambruSeFueALaGuerra" os3conadrian@gmail.com < email.txt
+
+
+Logs:
+
+sudo tail -n 200 /var/log/maillog
+
+🖨️ Práctica 3 – Servidor de Impresión (CUPS + cups-pdf)
+🔧 Instalación
+sudo dnf install cups cups-pdf -y
+sudo systemctl enable cups --now
+sudo systemctl status cups
+
+🛠 Configurar acceso en:
+sudo vim /etc/cups/cupsd.conf
+
+
+Cambios:
+
+Listen localhost:631
+
+<Location />
+  Order allow,deny
+  Allow @LOCAL
+</Location>
+
+<Location /admin>
+  Order allow,deny
+  Allow @LOCAL
+  AuthType Default
+  Require user @SYSTEM
+</Location>
+
+
+Reiniciar:
+
+sudo systemctl restart cups
+
+
+Firewall:
+
+sudo firewall-cmd --add-port=631/tcp --permanent
+sudo firewall-cmd --reload
+
+🖨 Agregar impresora desde Windows
+
+En Windows agregar:
+
+http://10.0.0.148:631/printers/Cups-PDF
+
+
+Archivos generados aparecerán en:
+
+ls -l /var/www/cups-pdf/ANONYMOUS/
