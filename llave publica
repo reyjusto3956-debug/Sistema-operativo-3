@@ -1,0 +1,2 @@
+ssh-keygen -t rsa -b 4096 -C "tu_correo_o_nombre"
+cat ~/.ssh/id_rsa.pub
